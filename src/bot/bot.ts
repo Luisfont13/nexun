@@ -1,4 +1,23 @@
-// Utilidades matemáticas y de siembra
+// Evitar lava a menos que vaya a hacer un Nether portal
+// Importar mecánicas externas
+import { hablarEnLenguajeNatural } from '../ai/lenguaje/chatnatural';
+import { evitarLava } from '../mechanics/lava';
+import { branchMining } from '../mechanics/branchMining';
+import { buscarCofres } from '../mechanics/chest';
+import { explorarAldea } from '../mechanics/village';
+import { construirNetherPortal } from '../mechanics/netherPortal';
+import { explorarCuevasYMinar } from '../mechanics/rareMining';
+import { construirRefugio } from '../mechanics/refuge';
+import { plantarAuto } from '../mechanics/plantarAuto';
+import { pescarAuto } from '../mechanics/pescarAuto';
+import { hacerWaterDrop } from '../mechanics/waterdrop';
+import { hacerPuente } from '../mechanics/puente';
+
+// Estructura para añadir más mecánicas automáticamente
+const mecanicasExtra: { [key: string]: (bot: any, ...args: any[]) => void } = {
+  waterdrop: hacerWaterDrop,
+};
+
 interface MathInfo {
   [key: string]: ((a: number, b: number) => number) | (() => string);
 }
@@ -33,10 +52,40 @@ function getBestTool(bot: any, blockName: string): string | null {
 
 // Defensa contra mobs hostiles y uso de escudo
 function setupCombat(bot: any) {
+  let lastHurt = 0;
   bot.on('entityHurt', (entity: any) => {
+    console.log('[EVENT] entityHurt:', { entity, position: entity.position, health: bot.health, food: bot.food });
     if (entity === bot.entity) {
+      const now = Date.now();
+      if (now - lastHurt < 1000) return; // Ignora golpes repetidos en menos de 1 segundo
+      lastHurt = now;
+      // Si el atacante es un jugador, devolver el golpe
+      const attackers = Object.values(bot.entities).filter((e: any) => e.type === 'player' && e.position && e.position.distanceTo(bot.entity.position) < 4);
+      if (attackers.length > 0) {
+        const attacker = attackers[0] as any;
+        const name = attacker.username || attacker.name || 'Jugador';
+        console.log('[DEFENSA] Atacante detectado:', { name, attackerPos: attacker.position, botPos: bot.entity.position });
+        // Si el atacante es el propio bot, ignora la defensa
+        if (name === bot.username) {
+          bot.chat('Ignoro defensa: el atacante soy yo mismo.');
+          console.log('[DEFENSA] Ignorado: atacante es el propio bot.');
+          return;
+        }
+        if (!attacker.position || typeof attacker.position.offset !== 'function' || bot.entity.position.distanceTo(attacker.position) > 4) {
+          bot.chat('Atacante fuera de alcance, olvido la defensa.');
+          console.log('[DEFENSA] Atacante fuera de alcance, defensa ignorada.');
+          return;
+        }
+        bot.chat(`¡${name} me ha atacado, devuelvo el golpe!`);
+        bot.lookAt(attacker.position.offset(0, 1, 0));
+        bot.attack(attacker);
+        console.log('[DEFENSA] Ataque realizado a', name);
+        return;
+      }
+      // Si el atacante es un mob
       const mobs = Object.values(bot.entities).filter((e: any) => e.type === 'mob' && e.mobType !== 'Enderman' && e.position.distanceTo(bot.entity.position) < 8);
       if (mobs.length > 0) {
+  console.log('[DEFENSA] Mob hostil detectado:', mobs.map((m: any) => ({ type: m.mobType, pos: m.position })));
         const shield = bot.inventory.items().find((i: any) => i.name.includes('shield'));
         if (shield) bot.equip(shield, 'off-hand');
         const mob: any = mobs[0];
@@ -44,6 +93,7 @@ function setupCombat(bot: any) {
           bot.lookAt(mob.position.offset(0, 1, 0));
         }
         bot.attack(mob);
+        console.log('[DEFENSA] Ataque realizado a mob', mob.mobType);
       }
     }
   });
@@ -87,6 +137,163 @@ import * as path from 'path';
 import * as dotenv from 'dotenv';
 import axios from 'axios';
 import * as nbt from 'prismarine-nbt';
+import { attackPlayer } from '../mechanics/pvp';
+import { construir } from '../mechanics/build';
+import { recolectar } from '../mechanics/collect';
+// Reconexión automática
+let reconnectListenersSet = false;
+function autoReconnect(startBotFn: () => void) {
+  if (!reconnectListenersSet) {
+    process.setMaxListeners(20);
+    process.on('uncaughtException', (err) => {
+      console.error('Error fatal, reiniciando bot:', err);
+      setTimeout(() => startBotFn(), 5000);
+    });
+    process.on('unhandledRejection', (err) => {
+      console.error('Error no manejado, reiniciando bot:', err);
+      setTimeout(() => startBotFn(), 5000);
+    });
+    process.on('exit', (code) => {
+      console.error('Bot abandonó la partida (exit code:', code, '), reiniciando...');
+      setTimeout(() => startBotFn(), 5000);
+    });
+    reconnectListenersSet = true;
+  }
+}
+
+let estaOcupado = false;
+let accionRealizada = false;
+// Equipar armadura, herramientas y escudo automáticamente
+function autoEquip(bot: any) {
+  // Equipar todas las armaduras disponibles en el inventario automáticamente
+  const armorTypes = [
+    { type: 'helmet', slot: 'head' },
+    { type: 'chestplate', slot: 'torso' },
+    { type: 'leggings', slot: 'legs' },
+    { type: 'boots', slot: 'feet' }
+  ];
+  for (const { type, slot } of armorTypes) {
+    const items = bot.inventory.items().filter((i: any) => i.name.includes(type));
+    for (const item of items) {
+      try {
+        bot.equip(item, slot);
+      } catch (e) {
+        // Si ya está equipado, ignora el error
+      }
+    }
+  }
+  // Equipar todos los escudos disponibles
+  const shields = bot.inventory.items().filter((i: any) => i.name.includes('shield'));
+  for (const shield of shields) {
+    try {
+      bot.equip(shield, 'off-hand');
+    } catch (e) {}
+  }
+  // Equipar mejor herramienta
+  const tools = ['netherite_pickaxe', 'diamond_pickaxe', 'iron_pickaxe', 'stone_pickaxe', 'netherite_axe', 'diamond_axe', 'iron_axe', 'stone_axe'];
+  for (const tool of tools) {
+    const item = bot.inventory.items().find((i: any) => i.name.includes(tool));
+    if (item) {
+      try {
+        bot.equip(item, 'hand');
+      } catch (e) {}
+      break;
+    }
+  }
+}
+
+// Buscar comida y comer si tiene hambre
+function buscarYComer(bot: any) {
+  if (typeof bot.food !== 'number' || bot.food === undefined) return;
+  if (bot.food < 16) {
+    if (bot._comiendo) {
+      bot.chat('Ya estoy comiendo, espero terminar antes de volver a comer.');
+      return;
+    }
+    const alimentos = [
+      'bread', 'apple', 'cooked_beef', 'cooked_porkchop', 'cooked_chicken', 'cooked_mutton', 'cooked_cod', 'cooked_salmon',
+      'carrot', 'potato', 'baked_potato', 'beetroot', 'melon_slice', 'pumpkin_pie', 'cookie', 'sweet_berries', 'golden_apple', 'rabbit_stew'
+    ];
+    const comida = bot.inventory.items().find((i: any) => alimentos.some(a => i.name === a));
+    if (comida && typeof bot.canEat === 'function' ? bot.canEat(comida) : true) {
+      try {
+        bot.equip(comida, 'hand');
+        bot._comiendo = true;
+        Promise.resolve(bot.consume()).then(() => {
+          bot._comiendo = false;
+          bot.chat('Comí correctamente.');
+        }).catch((err) => {
+          bot._comiendo = false;
+          bot.chat('No pude comer: ' + (err?.message || 'Error desconocido'));
+        });
+        setTimeout(() => { bot._comiendo = false; }, 2500);
+      } catch (e) {
+        bot._comiendo = false;
+        bot.chat('No pude comer automáticamente.');
+      }
+    } else {
+      bot.chat('No tengo comida comestible, buscaré.');
+      recolectar(bot, 'wheat');
+    }
+  }
+}
+
+// Crafting automático en mesa de crafteo
+function autoCraft(bot: any, itemName: string, cantidad: number) {
+  const mcData = require('minecraft-data')(bot.version);
+  const recipe = bot.recipesFor(mcData.itemsByName[itemName]?.id, null, 1, bot.inventory);
+  if (recipe && recipe.length > 0) {
+    const craftingTable = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 16 });
+    if (craftingTable) {
+      bot.craft(recipe[0], cantidad, craftingTable);
+      bot.chat(`Crafteando ${cantidad} ${itemName}`);
+    } else {
+      bot.chat('No hay mesa de crafteo cerca.');
+    }
+  } else {
+    bot.chat('No sé cómo craftear ese objeto.');
+  }
+}
+
+// Uso inteligente de camas (solo en Overworld y solo si es de noche)
+function usarCama(bot: any) {
+  // Mejor detección de noche: Minecraft noche es entre 12541 y 23458 (ticks)
+  if (bot.game.dimension !== 'overworld') {
+    bot.chat('Solo se puede dormir en el Overworld.');
+    return;
+  }
+  if (!bot.time || typeof bot.time.timeOfDay !== 'number') {
+    bot.chat('No se puede determinar la hora.');
+    return;
+  }
+  // Noche: entre 12541 y 23458 ticks
+  const isNight = bot.time.timeOfDay >= 12541 && bot.time.timeOfDay <= 23458;
+  if (!isNight) {
+    bot.chat('No se puede dormir ahora. Solo de noche.');
+    return;
+  }
+  if (bot.isSleeping) {
+    bot.chat('Ya estoy durmiendo.');
+    return;
+  }
+  const cama = bot.findBlock({ matching: (b: any) => b.name.includes('bed'), maxDistance: 16 });
+  if (cama) {
+    bot.sleep(cama).catch(() => {
+      bot.chat('No se pudo dormir, probablemente no es de noche o ya estoy durmiendo.');
+    });
+    bot.chat('Intentando dormir para saltar la noche.');
+  } else {
+    bot.chat('No hay cama cerca.');
+  }
+}
+import { minar as minarOriginal } from '../mechanics/mine';
+
+// Minar robusto para evitar errores de dig
+import { minar } from '../mechanics/mine';
+// Reconocimiento avanzado de bloques
+import { reconocerBloque } from '../mechanics/utils';
+
+// Hacer puentes sobre huecos profundos si tiene bloques
 dotenv.config();
 
 // Límite de solicitudes a Geminity
@@ -123,6 +330,7 @@ async function askGeminity(prompt: string): Promise<string> {
 }
 
 export function startBot() {
+  autoReconnect(startBot);
   const configPath = path.join(__dirname, '../../server.json');
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
@@ -137,22 +345,128 @@ export function startBot() {
 
   setupCombat(bot);
   manejarInventario(bot);
+  // Comer automáticamente al recibir daño, recolectar o terminar acción
+  bot.on('entityHurt', () => buscarYComer(bot));
+  bot.on('playerCollect', () => buscarYComer(bot));
+  bot.on('blockBreakProgressEnd', () => buscarYComer(bot));
 
   bot.once('spawn', () => {
+    // Asegurar valores válidos para health y food
+    const health = typeof bot.health === 'number' ? bot.health : 'N/A';
+    const food = typeof bot.food === 'number' ? bot.food : 'N/A';
+    console.log('[BOT] Estado inicial:', {
+      username: bot.username,
+      health,
+      food,
+      position: bot.entity.position,
+      inventory: bot.inventory.items().map(i => i.name)
+    });
     console.log('Bot conectado y listo.');
     bot.chat('¡Bot listo para recolectar recursos!');
-    // Buscar y recolectar recursos cercanos (madera)
-    const mcData = require('minecraft-data')(bot.version);
-    const logIds = [
-      mcData.blocksByName.oak_log?.id,
-      mcData.blocksByName.birch_log?.id,
-      mcData.blocksByName.spruce_log?.id
-    ].filter(Boolean);
-    const blocks = bot.findBlocks({ matching: logIds, maxDistance: 32, count: 1 });
-    if (blocks.length > 0) {
-      bot.chat('Recolectando madera...');
-      bot.pathfinder.setGoal(new goals.GoalBlock(blocks[0].x, blocks[0].y, blocks[0].z));
-    }
+  autoEquip(bot);
+  buscarYComer(bot);
+    // Autonomía: patrullar y buscar recursos automáticamente
+    setInterval(() => {
+      if (estaOcupado) return;
+      estaOcupado = true;
+      // Decisiones automáticas coherentes
+      buscarYComer(bot); // Comer siempre antes de cualquier acción
+      autoEquip(bot);
+      const mcData = require('minecraft-data')(bot.version);
+      const madera = bot.inventory.items().filter((i: any) => i.name.includes('log'));
+      const piedra = bot.inventory.items().filter((i: any) => i.name.includes('cobblestone'));
+      const palos = bot.inventory.items().filter((i: any) => i.name.includes('stick'));
+      const comida = bot.inventory.items().filter((i: any) => i.name.includes('apple') || i.name.includes('bread') || i.name.includes('wheat'));
+
+      // Evitar lava si no va a construir portal
+  if (evitarLava(bot, goals, reconocerBloque)) return;
+
+      // Minar en patrón de rama
+      if (branchMining(bot)) return;
+
+      // Buscar cofres y abrirlos
+      if (buscarCofres(bot)) return;
+
+      // Explorar aldeas
+      if (explorarAldea(bot)) return;
+
+      // Explorar cuevas y minar minerales raros
+      if (explorarCuevasYMinar(bot)) return;
+
+      // Construir refugio si hay mobs cerca
+      construirRefugio(bot);
+
+      // Plantar árboles y cultivos
+      plantarAuto(bot);
+
+      // Pescar si está cerca de agua y tiene caña
+      pescarAuto(bot);
+
+      // Recolectar madera si tiene poca
+      if (madera.length < 8) {
+        const logIds = [
+          mcData.blocksByName.oak_log?.id,
+          mcData.blocksByName.birch_log?.id,
+          mcData.blocksByName.spruce_log?.id
+        ].filter(Boolean);
+        const blocks = bot.findBlocks({ matching: logIds, maxDistance: 32, count: 1 });
+        if (blocks.length > 0) {
+          bot.chat('Recolectando madera automáticamente...');
+          bot.pathfinder.setGoal(new goals.GoalBlock(blocks[0].x, blocks[0].y, blocks[0].z));
+          return;
+        }
+      }
+      // Minar piedra si tiene poca
+      if (piedra.length < 16) {
+        const stoneId = mcData.blocksByName.stone?.id;
+        const stoneBlock = bot.findBlock({ matching: stoneId, maxDistance: 32 });
+        if (stoneBlock) {
+          bot.chat('Minando piedra automáticamente...');
+          bot.pathfinder.setGoal(new goals.GoalBlock(stoneBlock.position.x, stoneBlock.position.y, stoneBlock.position.z));
+          return;
+        }
+      }
+      // Buscar alimentos si tiene pocos
+      if (comida.length < 4) {
+        const wheatId = mcData.blocksByName.wheat?.id;
+        const wheatBlock = bot.findBlock({ matching: wheatId, maxDistance: 32 });
+        if (wheatBlock) {
+          bot.chat('Recolectando trigo automáticamente...');
+          bot.pathfinder.setGoal(new goals.GoalBlock(wheatBlock.position.x, wheatBlock.position.y, wheatBlock.position.z));
+          return;
+        }
+      }
+      // Movimiento natural: patrullar con pausas y giros
+      if (!bot.pathfinder.isMoving()) {
+        hacerPuente(bot);
+        const x = bot.entity.position.x + Math.random() * 8 - 4;
+        const z = bot.entity.position.z + Math.random() * 8 - 4;
+        const y = bot.entity.position.y;
+        setTimeout(() => {
+          bot.look(bot.entity.yaw + (Math.random() - 0.5), bot.entity.pitch + (Math.random() - 0.5));
+          bot.chat('Explorando el entorno...');
+          bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
+        }, Math.random() * 5000 + 2000);
+      }
+      // Dormir si es de noche
+      if (bot.time && bot.time.day >= 13000 && bot.game.dimension === 'overworld') {
+        usarCama(bot);
+      }
+      // Craftear herramientas básicas
+      if (madera.length > 8 && piedra.length > 16 && palos.length < 4) {
+        autoCraft(bot, 'stick', 4);
+      }
+      if (piedra.length > 16 && palos.length > 2) {
+        autoCraft(bot, 'stone_pickaxe', 1);
+      }
+      // Prepararse para combate si detecta mobs hostiles
+      const mobs = Object.values(bot.entities).filter((e: any) => e.type === 'mob' && e.mobType !== 'Enderman' && e.position && e.position.distanceTo(bot.entity.position) < 10);
+      if (mobs.length > 0) {
+        bot.chat('¡Alerta! Mob hostil detectado, preparándome para combatir.');
+        autoEquip(bot);
+      }
+      estaOcupado = false;
+    }, 30000);
   });
 
   bot.on('entitySwingArm', (entity) => {
@@ -169,6 +483,74 @@ export function startBot() {
 
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
+    // PvP contra jugadores
+    if (message.startsWith('pvp ') || message.startsWith('ataca ')) {
+      const partes = message.split(' ');
+      const target = partes[1];
+      if (target) {
+        attackPlayer(bot, target);
+        bot.chat(`¡Atacando a ${target} en PvP!`);
+      } else {
+        bot.chat('Debes especificar el nombre del jugador.');
+      }
+      return;
+    }
+    // Construcción
+    if (message.startsWith('construye ')) {
+      const [_, blockName, x, y, z] = message.split(' ');
+      construir(bot, blockName, { x: Number(x), y: Number(y), z: Number(z) });
+      return;
+    }
+    // Minería
+    if (message.startsWith('mina ')) {
+      const blockName = message.split(' ')[1];
+      minar(bot, blockName);
+      return;
+    }
+    // Recolección
+    if (message.startsWith('recolecta ')) {
+      const resourceName = message.split(' ')[1];
+      recolectar(bot, resourceName);
+      return;
+    }
+    // Equipar automáticamente
+    if (message === 'equipa') {
+      autoEquip(bot);
+      bot.chat('Equipamiento automático realizado.');
+      return;
+    }
+    // Comer si tiene hambre
+    if (message === 'come') {
+      buscarYComer(bot);
+      return;
+    }
+    // Craftear
+    if (message.startsWith('craftea ')) {
+      const [_, itemName, cantidad] = message.split(' ');
+      autoCraft(bot, itemName, Number(cantidad) || 1);
+      return;
+    }
+    // Dormir
+    if (message === 'dormir') {
+      usarCama(bot);
+      return;
+    }
+    // Water drop perfecto
+    if (message === 'waterdrop') {
+      hacerWaterDrop(bot);
+      return;
+    }
+    // Mecánicas extra automáticas
+    if (message.startsWith('mecanica ')) {
+      const [_, nombre, ...args] = message.split(' ');
+      if (mecanicasExtra[nombre]) {
+        mecanicasExtra[nombre](bot, ...args);
+        bot.chat(`Mecánica ${nombre} ejecutada.`);
+      } else {
+        bot.chat('No conozco esa mecánica.');
+      }
+      return;
+    }
     if (message === 'vem') {
       const player = bot.players[username];
       if (player && player.entity) {
@@ -186,23 +568,11 @@ export function startBot() {
       return;
     }
     if (message.startsWith('!math ')) {
-      // Ejemplo: !math suma 2 3
-      const [op, a, b] = message.slice(6).split(' ');
-      if (op in mathInfo) {
-        const fn = mathInfo[op];
-        if (typeof fn === 'function' && fn.length === 2) {
-          bot.chat('Resultado: ' + (fn as (a: number, b: number) => number)(Number(a), Number(b)));
-        } else {
-          bot.chat('Operación no reconocida. Usa suma, resta, multiplicar, dividir.');
-        }
-      } else {
-        bot.chat('Operación no reconocida. Usa suma, resta, multiplicar, dividir.');
-      }
+      // ...existing code...
       return;
     }
     if (message === 'plantar arbol') {
-      const plantar = mathInfo['plantarArbol'] as () => string;
-      bot.chat(plantar());
+      // ...existing code...
       return;
     }
     if (message.startsWith('!ask ')) {
@@ -210,13 +580,14 @@ export function startBot() {
       let response = localModel(prompt);
       if (!response) {
         response = await askGeminity(prompt);
+        // Aprendizaje automático: guardar y mejorar con Gemini
+        knowledgeNbt[prompt] = response;
+        const nbtData = nbt.writeUncompressed({ type: 'compound', name: '', value: knowledgeNbt });
+        fs.writeFileSync('knowledge.nbt', nbtData);
       }
       bot.chat(response);
       conversationLog.push({ username, prompt, response });
-      // Guardar en JSON
       fs.writeFileSync('conversation_log.json', JSON.stringify(conversationLog, null, 2));
-      // Guardar en NBT
-      // Guardar conversationLog como lista de strings en NBT (solo si hay elementos)
       if (conversationLog.length > 0) {
         const nbtData = nbt.writeUncompressed({
           type: 'compound',
@@ -235,10 +606,15 @@ export function startBot() {
       }
       return;
     }
-    // Aprender nuevas funciones si no reconoce el comando
-    if (!['vem', 'sigueme', 'plantar arbol'].includes(message) && !message.startsWith('!math ') && !message.startsWith('!ask ')) {
-      const learned = await aprenderFuncion(message);
-      bot.chat('Aprendido: ' + learned);
+    // Responder SIEMPRE con lenguaje natural si no reconoce el comando
+    if (!['vem', 'sigueme', 'plantar arbol', 'equipa', 'come', 'dormir'].includes(message) && !message.startsWith('!math ') && !message.startsWith('!ask ') && !message.startsWith('ataca ') && !message.startsWith('construye ') && !message.startsWith('mina ') && !message.startsWith('recolecta ') && !message.startsWith(' ')) {
+      try {
+        const respuesta = await hablarEnLenguajeNatural(message);
+        bot.chat(respuesta);
+      } catch (e) {
+        bot.chat('No pude responder en lenguaje natural.');
+      }
+      return;
     }
   });
 }
