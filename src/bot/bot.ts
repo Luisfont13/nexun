@@ -1,6 +1,11 @@
 // Evitar lava a menos que vaya a hacer un Nether portal
 // Importar mecánicas externas
-import { hablarEnLenguajeNatural } from '../ai/lenguaje/chatnatural';
+// Nueva función de IA: usar el motor AI-Light (controllet) con Llama
+
+import { hablarEnLenguajeNatural } from './llama_bridge';
+import { parseAndExecuteLlamaInstruction } from './llama_parser';
+
+
 import { evitarLava } from '../mechanics/lava';
 import { branchMining } from '../mechanics/branchMining';
 import { buscarCofres } from '../mechanics/chest';
@@ -137,9 +142,7 @@ import * as path from 'path';
 import * as dotenv from 'dotenv';
 import axios from 'axios';
 import * as nbt from 'prismarine-nbt';
-import { attackPlayer } from '../mechanics/pvp';
 import { construir } from '../mechanics/build';
-import { recolectar } from '../mechanics/collect';
 // Reconexión automática
 let reconnectListenersSet = false;
 function autoReconnect(startBotFn: () => void) {
@@ -214,26 +217,30 @@ function buscarYComer(bot: any) {
       'bread', 'apple', 'cooked_beef', 'cooked_porkchop', 'cooked_chicken', 'cooked_mutton', 'cooked_cod', 'cooked_salmon',
       'carrot', 'potato', 'baked_potato', 'beetroot', 'melon_slice', 'pumpkin_pie', 'cookie', 'sweet_berries', 'golden_apple', 'rabbit_stew'
     ];
-    const comida = bot.inventory.items().find((i: any) => alimentos.some(a => i.name === a));
-    if (comida && typeof bot.canEat === 'function' ? bot.canEat(comida) : true) {
-      try {
-        bot.equip(comida, 'hand');
-        bot._comiendo = true;
-        Promise.resolve(bot.consume()).then(() => {
-          bot._comiendo = false;
-          bot.chat('Comí correctamente.');
-        }).catch((err) => {
-          bot._comiendo = false;
-          bot.chat('No pude comer: ' + (err?.message || 'Error desconocido'));
-        });
-        setTimeout(() => { bot._comiendo = false; }, 2500);
-      } catch (e) {
-        bot._comiendo = false;
-        bot.chat('No pude comer automáticamente.');
-      }
-    } else {
+  const comida = bot.inventory.items().find((i: any) => alimentos.some(a => i.name.includes(a)));
+    if (!comida) {
       bot.chat('No tengo comida comestible, buscaré.');
       recolectar(bot, 'wheat');
+      return;
+    }
+    if (typeof bot.canEat === 'function' && !bot.canEat(comida)) {
+      bot.chat('No puedo comer este objeto.');
+      return;
+    }
+    try {
+      bot.equip(comida, 'hand');
+      bot._comiendo = true;
+      Promise.resolve(bot.consume()).then(() => {
+        bot._comiendo = false;
+        bot.chat('Comí correctamente.');
+      }).catch((err) => {
+        bot._comiendo = false;
+        bot.chat('No pude comer: ' + (err?.message || 'Error desconocido'));
+      });
+      setTimeout(() => { bot._comiendo = false; }, 2500);
+    } catch (e) {
+      bot._comiendo = false;
+      bot.chat('No pude comer automáticamente.');
     }
   }
 }
@@ -289,7 +296,6 @@ function usarCama(bot: any) {
 import { minar as minarOriginal } from '../mechanics/mine';
 
 // Minar robusto para evitar errores de dig
-import { minar } from '../mechanics/mine';
 // Reconocimiento avanzado de bloques
 import { reconocerBloque } from '../mechanics/utils';
 
@@ -329,7 +335,47 @@ async function askGeminity(prompt: string): Promise<string> {
   }
 }
 
+
+
+// Variables de backoff y control de reconexión
+let reconnectDelay = 20000; // 20 segundos inicial
+const reconnectDelayMax = 300000; // 5 minutos máximo
+let reconnecting = false;
+
+
+let botInstance: any = null;
+
+// Acceso seguro a la instancia actual del bot
+function getBotInstance() {
+  return botInstance;
+}
+
+// --- EXPORTACIÓN API PARA IA ---
+import { minar } from '../mechanics/mine';
+import { recolectar } from '../mechanics/collect';
+import { attackPlayer } from '../mechanics/pvp';
+// autoEquip ya debe estar definida arriba
+
+export const botApi = {
+  mover: (x: number, y: number, z: number) => getBotInstance()?.pathfinder?.setGoal && getBotInstance().pathfinder.setGoal(new goals.GoalBlock(x, y, z)),
+  minar: (bloque: string) => minar && getBotInstance() && minar(getBotInstance(), bloque),
+  recolectar: (objeto: string) => recolectar && getBotInstance() && recolectar(getBotInstance(), objeto),
+  atacar: (objetivo: string) => attackPlayer && getBotInstance() && attackPlayer(getBotInstance(), objetivo),
+  chatear: (mensaje: string) => global.sendChat && global.sendChat(mensaje),
+  equipar: () => autoEquip && getBotInstance() && autoEquip(getBotInstance()),
+};
+
 export function startBot() {
+  // Si ya existe una instancia previa, ciérrala correctamente antes de crear otra
+  if (botInstance) {
+    try {
+      botInstance.removeAllListeners && botInstance.removeAllListeners();
+      botInstance.quit && botInstance.quit();
+    } catch (e) {
+      console.error('[BOT] Error al cerrar instancia previa:', e);
+    }
+    botInstance = null;
+  }
   autoReconnect(startBot);
   const configPath = path.join(__dirname, '../../server.json');
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -339,6 +385,45 @@ export function startBot() {
     port: config.port,
     username: config.username || 'ProBot',
     version: config.version || false
+  });
+  botInstance = bot;
+  // Propiedad custom para evitar minería concurrente
+  (bot as any).estaMinando = false;
+
+  // Listeners de desconexión y reconexión con backoff exponencial
+
+  // Exponer funciones seguras del bot para la IA
+  // Definir sendChat global para evitar spam y exponerlo a la IA
+  global.sendChat = function sendChat(mensaje: string) {
+    const now = Date.now();
+    if (!global.lastChatTime) global.lastChatTime = 0;
+    if (now - global.lastChatTime < 4000) {
+      console.log('[BOT] Mensaje bloqueado por cooldown de chat:', mensaje);
+      return;
+    }
+    botInstance.chat(mensaje);
+    global.lastChatTime = now;
+  };
+
+  function scheduleReconnect(event: string, reason: any) {
+    if (reconnecting) return;
+    reconnecting = true;
+    console.error(`[BOT] ${event}. Razón:`, reason, `Reintentando en ${Math.round(reconnectDelay/1000)}s...`);
+    setTimeout(() => {
+      reconnectDelay = Math.min(Math.floor(reconnectDelay * 1.7), reconnectDelayMax);
+      reconnecting = false;
+      startBot();
+    }, reconnectDelay);
+  }
+  bot.on('end', (reason) => scheduleReconnect('Desconectado (end)', reason));
+  bot.on('kicked', (reason) => scheduleReconnect('Kickeado del servidor', reason));
+  bot.on('error', (err) => scheduleReconnect('Error fatal', err));
+
+  // Al conectar exitosamente, reiniciar el backoff
+
+  bot.once('spawn', () => {
+    reconnectDelay = 20000;
+    reconnecting = false;
   });
 
   bot.loadPlugin(pathfinder);
@@ -351,6 +436,8 @@ export function startBot() {
   bot.on('blockBreakProgressEnd', () => buscarYComer(bot));
 
   bot.once('spawn', () => {
+    // Reiniciar el backoff al conectar
+    reconnectDelay = 5000;
     // Asegurar valores válidos para health y food
     const health = typeof bot.health === 'number' ? bot.health : 'N/A';
     const food = typeof bot.food === 'number' ? bot.food : 'N/A';
@@ -363,8 +450,8 @@ export function startBot() {
     });
     console.log('Bot conectado y listo.');
     bot.chat('¡Bot listo para recolectar recursos!');
-  autoEquip(bot);
-  buscarYComer(bot);
+    autoEquip(bot);
+    buscarYComer(bot);
     // Autonomía: patrullar y buscar recursos automáticamente
     setInterval(() => {
       if (estaOcupado) return;
@@ -481,8 +568,17 @@ export function startBot() {
     }
   });
 
+  // Cooldown global para evitar spam de chat
+  let lastChatTime = 0;
+  const chatCooldown = 4000; // 4 segundos entre mensajes
+
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
+    const now = Date.now();
+    if (now - lastChatTime < chatCooldown) {
+      console.log('[BOT] Mensaje bloqueado por cooldown de chat:', message);
+      return;
+    }
     // PvP contra jugadores
     if (message.startsWith('pvp ') || message.startsWith('ataca ')) {
       const partes = message.split(' ');
@@ -503,8 +599,18 @@ export function startBot() {
     }
     // Minería
     if (message.startsWith('mina ')) {
+      if ((bot as any).estaMinando) {
+        bot.chat('Ya estoy minando, espera a que termine.');
+        return;
+      }
       const blockName = message.split(' ')[1];
-      minar(bot, blockName);
+      (bot as any).estaMinando = true;
+      try {
+        await minar(bot, blockName);
+      } catch (e) {
+        bot.chat('Error al minar: ' + (e?.message || 'desconocido'));
+      }
+      (bot as any).estaMinando = false;
       return;
     }
     // Recolección
@@ -551,7 +657,7 @@ export function startBot() {
       }
       return;
     }
-    if (message === 'vem') {
+    if (message.includes('vem')) {
       const player = bot.players[username];
       if (player && player.entity) {
         bot.chat('¡Voy hacia ti!');
@@ -559,7 +665,7 @@ export function startBot() {
       }
       return;
     }
-    if (message === 'sigueme') {
+    if (message.includes('sigueme')) {
       const player = bot.players[username];
       if (player && player.entity) {
         bot.chat('¡Te sigo!');
@@ -606,13 +712,27 @@ export function startBot() {
       }
       return;
     }
+  
     // Responder SIEMPRE con lenguaje natural si no reconoce el comando
     if (!['vem', 'sigueme', 'plantar arbol', 'equipa', 'come', 'dormir'].includes(message) && !message.startsWith('!math ') && !message.startsWith('!ask ') && !message.startsWith('ataca ') && !message.startsWith('construye ') && !message.startsWith('mina ') && !message.startsWith('recolecta ') && !message.startsWith(' ')) {
       try {
         const respuesta = await hablarEnLenguajeNatural(message);
-        bot.chat(respuesta);
+        global.sendChat(respuesta);
+        lastChatTime = Date.now();
+        // Guardar pregunta y respuesta en conversationLog y knowledgeNbt
+        conversationLog.push({ username, pregunta: message, respuesta });
+        fs.writeFileSync('conversation_log.json', JSON.stringify(conversationLog, null, 2));
+        knowledgeNbt[message] = respuesta;
+        const nbtData = nbt.writeUncompressed({ type: 'compound', name: '', value: knowledgeNbt });
+        fs.writeFileSync('knowledge.nbt', nbtData);
+        // Mostrar por consola para comprobar funcionamiento
+        console.log('[IA] Pregunta:', message);
+        console.log('[IA] Respuesta:', respuesta);
+        // Ejecutar parser de instrucciones de Llama si la respuesta es una instrucción válida
+        parseAndExecuteLlamaInstruction(respuesta);
       } catch (e) {
-        bot.chat('No pude responder en lenguaje natural.');
+        global.sendChat('No pude responder en lenguaje natural.');
+        console.error('[IA] Error al responder:', e);
       }
       return;
     }

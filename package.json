@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",
-    "dev": "ts-node src/main.ts"
+    "dev": "ts-node src/main.ts",
+    "backend": "cd src/modulo/controllet && uvicorn llama_backend:app --host 0.0.0.0 --port 8000",
+    "all": "npm-run-all --parallel backend dev"
   },
   "keywords": [
     "minecraft",
@@ -20,8 +22,10 @@
     "@tensorflow/tfjs": "^4.22.0",
     "axios": "^1.11.0",
     "dotenv": "^17.2.1",
+    "fastify": "^5.5.0",
     "mineflayer": "^4.0.0",
     "mineflayer-pathfinder": "^2.4.5",
+    "node-fetch": "^2.6.7",
     "prismarine-nbt": "^2.7.0"
   },
   "devDependencies": {
