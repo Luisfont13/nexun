@@ -10,3 +10,5 @@ node_modules/
 # Ignorar archivos del sistema
 .DS_Store
 Thumbs.db
+# Ignorar carpetas
+node_modules
