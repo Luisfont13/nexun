@@ -683,7 +683,7 @@ export function startBot() {
     if (message === 'equipar arco') {
       taskManager.add({
         id: `equipar_arco_${Date.now()}`,
-        run: () => equiparArco(bot),
+        run: async () => { await equiparArco(bot); },
         priority: 3
       });
       return;
@@ -711,7 +711,7 @@ export function startBot() {
     if (message === 'equipar escudo') {
       taskManager.add({
         id: `equipar_escudo_${Date.now()}`,
-        run: () => equiparEscudo(bot),
+        run: async () => { await equiparEscudo(bot); },
         priority: 3
       });
       return;

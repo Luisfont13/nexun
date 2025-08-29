@@ -15,8 +15,20 @@ export interface Task {
 export class TaskManager {
   private queue: Task[] = [];
   private running = false;
+  private enabled = false;
+
+  start() {
+    this.enabled = true;
+    this.tick();
+  }
+
+  stop() {
+    this.enabled = false;
+    this.cancelAll();
+  }
 
   add(task: Task) {
+    if (!this.enabled) return;
     task.createdAt = Date.now();
     task.priority = task.priority ?? 0;
     this.queue.push(task);
@@ -33,7 +45,7 @@ export class TaskManager {
   }
 
   private async tick() {
-    if (this.running) return;
+    if (this.running || !this.enabled) return;
     const task = this.queue.shift();
     if (!task) return;
     this.running = true;
@@ -44,7 +56,7 @@ export class TaskManager {
     } finally {
       this.running = false;
       // next
-      if (this.queue.length) setTimeout(() => this.tick(), 0);
+      if (this.queue.length && this.enabled) setTimeout(() => this.tick(), 0);
     }
   }
 }
