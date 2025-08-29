@@ -2,7 +2,7 @@
 # Nexun - Bot modular de Minecraft con IA (Llama)
 
 ## Requisitos
-- Node.js >= 18
+- Node.js >= 22 -> lastest
 - npm
 - Minecraft Java Edition (servidor)
 
