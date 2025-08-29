@@ -14,9 +14,9 @@
 2. Configura el archivo `server.json` con los datos de tu servidor Minecraft:
 	```json
 	{
-	  "host": "127.0.0.1",
+	  "host": "servidor",
 	  "port": 25565,
-	  "username": "ProBot",
+	  "username": "bot name",
 	  "version": false
 	}
 	```
@@ -35,8 +35,9 @@
 	npm run dev
 	```
 
-## Integración IA Llama (opcional)
-Para usar la IA Llama, asegúrate de tener el backend Python corriendo (ver `/modulo/controllet/llama_backend_README.md`).
+## Integración IA
+Se esta desarrollando una ia espesifica que pueda responder 
+e usar las apis del bot
 
 ## Uso
 El bot responde a comandos en el chat de Minecraft y puede ejecutar instrucciones estructuradas desde la IA.

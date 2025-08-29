@@ -1,0 +1,17 @@
+{
+"hola":{"response":"Hola ¿cómo estás?","count":1,"updatedAt":1756324171183},
+"adios":{"response":"adiós ","count":1,"updatedAt":1756324410581},
+"que tal":{"response":"bien y tú?","count":1,"updatedAt":1756324434905},
+"como estas":{"response":"Bien y tu?","count":1,"updatedAt":1756324448099},
+"saludos":{"response":"¿Qué pasa?","count":1,"updatedAt":1756324460958},
+"gracias":{"response":"De nada","count":1,"updatedAt":1756324478098},
+"chao":{"response":"Adiós","count":1,"updatedAt":1756324490890},
+"buenas":{"response":"Buenas tardes","count":1,"updatedAt":1756324503978},
+"bueno":{"response":"Buen día","count":1,"updatedAt":1756324516880},
+"buenas noches":{"response":"Buenas noches","count":1,"updatedAt":1756324529840},
+"buenas tardes":{"response":"Buenas tardes","count":1,"updatedAt":1756324542806},
+"buen dia":{"response":"Buen día","count":1,"updatedAt":1756324555798},
+"buenas dias":{"response":"Buen días","count":1,"updatedAt":1756324568790},
+"buenas mañanas":{"response":"Buenos días","count":1,"updatedAt":1756324581790},
+"come":{"response":"¿comer?","count":1,"updatedAt":1756324594783}
+}

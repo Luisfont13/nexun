@@ -1,0 +1,24 @@
+{
+  "name": "torre_basica",
+  "origin": { "x": 0, "y": 0, "z": 0 },
+  "blocks": [
+    { "dx": 0, "dy": 0, "dz": 0, "name": "cobblestone" },
+    { "dx": 1, "dy": 0, "dz": 0, "name": "cobblestone" },
+    { "dx": 0, "dy": 0, "dz": 1, "name": "cobblestone" },
+    { "dx": 1, "dy": 0, "dz": 1, "name": "cobblestone" },
+    { "dx": 0, "dy": 1, "dz": 0, "name": "cobblestone" },
+    { "dx": 1, "dy": 1, "dz": 0, "name": "cobblestone" },
+    { "dx": 0, "dy": 1, "dz": 1, "name": "cobblestone" },
+    { "dx": 1, "dy": 1, "dz": 1, "name": "cobblestone" },
+    { "dx": 0, "dy": 2, "dz": 0, "name": "cobblestone" },
+    { "dx": 1, "dy": 2, "dz": 0, "name": "cobblestone" },
+    { "dx": 0, "dy": 2, "dz": 1, "name": "cobblestone" },
+    { "dx": 1, "dy": 2, "dz": 1, "name": "cobblestone" },
+    { "dx": 0, "dy": 3, "dz": 0, "name": "cobblestone" },
+    { "dx": 1, "dy": 3, "dz": 0, "name": "cobblestone" },
+    { "dx": 0, "dy": 3, "dz": 1, "name": "cobblestone" },
+    { "dx": 1, "dy": 3, "dz": 1, "name": "cobblestone" },
+    { "dx": 0, "dy": 4, "dz": 0, "name": "torch" },
+    { "dx": 1, "dy": 4, "dz": 1, "name": "torch" }
+  ]
+}

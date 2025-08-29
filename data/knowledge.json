@@ -1,0 +1,30 @@
+[
+  {
+    "patterns": ["como *(planto|plantar) arbol(es)?", "plantar arbol"],
+    "answers": [
+      "Coloca un brote sobre tierra o césped y asegúrate de tener espacio libre arriba.",
+      "Para plantar un árbol: brote en tierra, luz suficiente y algo de tiempo."
+    ]
+  },
+  {
+    "patterns": ["como (hacer|craftear) mesa de crafteo", "receta mesa de crafteo"],
+    "answers": [
+      "Mesa de crafteo: 4 tablones en un cuadrado en el inventario.",
+      "Craftea la mesa con 4 tablones colocados en 2x2."
+    ]
+  },
+  {
+    "patterns": ["(como|donde) (consigo|obtengo) comida", "tienes comida"],
+    "answers": [
+      "Consigue comida pescando, cazando, o cosechando trigo para pan.",
+      "La comida se obtiene de animales, pesca, cultivos o aldeas."
+    ]
+  },
+  {
+    "patterns": ["protege(me)?", "defiend(e|eme)", "mobs hostiles"],
+    "answers": [
+      "Me mantendré alerta y usaré el escudo contra mobs hostiles.",
+      "Activa defensa: detecto enemigos cercanos y respondo con cuidado."
+    ]
+  }
+]

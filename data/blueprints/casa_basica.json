@@ -1,0 +1,21 @@
+{
+  "name": "casa_basica",
+  "origin": { "x": 0, "y": 0, "z": 0 },
+  "blocks": [
+    { "dx": 0, "dy": 0, "dz": 0, "name": "oak_planks" },
+    { "dx": 1, "dy": 0, "dz": 0, "name": "oak_planks" },
+    { "dx": 2, "dy": 0, "dz": 0, "name": "oak_planks" },
+    { "dx": 0, "dy": 0, "dz": 1, "name": "oak_planks" },
+    { "dx": 2, "dy": 0, "dz": 1, "name": "oak_planks" },
+    { "dx": 0, "dy": 0, "dz": 2, "name": "oak_planks" },
+    { "dx": 1, "dy": 0, "dz": 2, "name": "oak_planks" },
+    { "dx": 2, "dy": 0, "dz": 2, "name": "oak_planks" },
+    { "dx": 0, "dy": 1, "dz": 0, "name": "oak_planks" },
+    { "dx": 2, "dy": 1, "dz": 0, "name": "oak_planks" },
+    { "dx": 0, "dy": 1, "dz": 2, "name": "oak_planks" },
+    { "dx": 2, "dy": 1, "dz": 2, "name": "oak_planks" },
+    { "dx": 1, "dy": 1, "dz": 0, "name": "glass" },
+    { "dx": 1, "dy": 1, "dz": 2, "name": "glass" },
+    { "dx": 1, "dy": 2, "dz": 1, "name": "oak_planks" }
+  ]
+}

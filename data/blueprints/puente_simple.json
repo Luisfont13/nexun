@@ -1,0 +1,11 @@
+{
+  "name": "puente_simple",
+  "origin": { "x": 0, "y": 0, "z": 0 },
+  "blocks": [
+    { "dx": 0, "dy": 0, "dz": 0, "name": "cobblestone" },
+    { "dx": 1, "dy": 0, "dz": 0, "name": "cobblestone" },
+    { "dx": 2, "dy": 0, "dz": 0, "name": "cobblestone" },
+    { "dx": 3, "dy": 0, "dz": 0, "name": "cobblestone" },
+    { "dx": 4, "dy": 0, "dz": 0, "name": "cobblestone" }
+  ]
+}
